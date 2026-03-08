@@ -25,6 +25,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/wallabag.png",
+        width: 242,
+        height: 191,
+        type: "image/png",
         alt: "Wallabax social preview",
       },
     ],
