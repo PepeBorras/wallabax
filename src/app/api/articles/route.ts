@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isLowQualityArticleHtml } from "@/lib/services/article-quality";
+import { getArticleQualityScore, isLowQualityArticleHtml } from "@/lib/services/article-quality";
 import { cleanArticleHtml } from "@/lib/services/clean-article-html";
 import { extractXArticle } from "@/lib/services/extract-x-article";
 import { getArticleBySourceUrl } from "@/lib/services/get-article";
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
 
     const existing = await getArticleBySourceUrl(sourceUrl);
     const existingIsLowQuality = existing ? isLowQualityArticleHtml(existing.cleaned_html) : false;
+    const existingQualityScore = existing ? getArticleQualityScore(existing.cleaned_html) : null;
 
     if (existing && !reprocess && !existingIsLowQuality) {
       const idOrSlug = existing.slug ?? existing.id;
@@ -65,6 +66,18 @@ export async function POST(request: NextRequest) {
     });
 
     const extractedIsLowQuality = isLowQualityArticleHtml(cleanedHtml);
+    const extractedQualityScore = getArticleQualityScore(cleanedHtml);
+
+    if (existing && extractedQualityScore < (existingQualityScore ?? 0)) {
+      const idOrSlug = existing.slug ?? existing.id;
+      return NextResponse.json({
+        permanentUrl: buildPermanentUrl(baseUrl, idOrSlug),
+        article: existing,
+        cached: true,
+        warning: "Fresh extraction scored lower than existing snapshot; kept existing version.",
+      });
+    }
+
     if (extractedIsLowQuality && !reprocess) {
       if (existing) {
         const idOrSlug = existing.slug ?? existing.id;
