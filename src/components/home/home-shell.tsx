@@ -39,10 +39,9 @@ export function HomeShell({ initialLimits }: HomeShellProps) {
         <h2 className="font-display mb-6 text-5xl leading-[1.1] font-extrabold tracking-tight text-slate-900 md:text-6xl">
           Turn X articles into{" "}
           <span className="relative inline-block text-(--color-primary)">
-            clean reader links
+            clean reader links.
             <span className="absolute bottom-1 left-0 -z-10 h-3 w-full rounded-full bg-teal-500/10" />
           </span>
-          .
         </h2>
         <p className="max-w-145 text-lg leading-relaxed font-medium text-slate-500 md:text-xl">
           If you use Wallabag to read later on devices like Kobo, you may have noticed that X’s new long-form articles don’t save properly.
