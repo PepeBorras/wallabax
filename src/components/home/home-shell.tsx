@@ -60,7 +60,7 @@ export function HomeShell({ initialLimits }: HomeShellProps) {
           Made by{" "}
           <a
             className="font-semibold text-slate-700 transition-colors hover:text-(--color-primary)"
-            href="https://www.pepeborras.com/"
+            href="https://x.com/PepeBorras"
             target="_blank"
             rel="noreferrer"
           >
