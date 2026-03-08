@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { isLowQualityArticleHtml } from "@/lib/services/article-quality";
 import { cleanArticleHtml } from "@/lib/services/clean-article-html";
 import { extractXArticle } from "@/lib/services/extract-x-article";
 import { getArticleBySourceUrl } from "@/lib/services/get-article";
@@ -39,10 +40,13 @@ export async function POST(request: NextRequest) {
     }
 
     const sourceUrl = normalizeArticleSourceUrl(parsed.data.sourceUrl);
+    const reprocess = parsed.data.reprocess;
     const baseUrl = getBaseUrl(request);
 
     const existing = await getArticleBySourceUrl(sourceUrl);
-    if (existing) {
+    const existingIsLowQuality = existing ? isLowQualityArticleHtml(existing.cleaned_html) : false;
+
+    if (existing && !reprocess && !existingIsLowQuality) {
       const idOrSlug = existing.slug ?? existing.id;
       return NextResponse.json({
         permanentUrl: buildPermanentUrl(baseUrl, idOrSlug),
@@ -60,6 +64,26 @@ export async function POST(request: NextRequest) {
       rawHtml: extracted.rawHtml,
     });
 
+    const extractedIsLowQuality = isLowQualityArticleHtml(cleanedHtml);
+    if (extractedIsLowQuality && !reprocess) {
+      if (existing) {
+        const idOrSlug = existing.slug ?? existing.id;
+        return NextResponse.json({
+          permanentUrl: buildPermanentUrl(baseUrl, idOrSlug),
+          article: existing,
+          cached: true,
+          warning: "Fresh extraction was low quality; returned existing snapshot.",
+        });
+      }
+
+      return NextResponse.json(
+        {
+          error: "Extraction quality is too low for this URL right now. Try again later or pass reprocess=true.",
+        },
+        { status: 422 },
+      );
+    }
+
     const saved = await saveArticle({
       sourceUrl,
       title: extracted.title,
@@ -67,6 +91,7 @@ export async function POST(request: NextRequest) {
       publishedAt: extracted.publishedAt,
       coverImageUrl: extracted.coverImageUrl,
       cleanedHtml,
+      overwriteExisting: Boolean(existing),
     });
 
     const idOrSlug = saved.slug ?? saved.id;

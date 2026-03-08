@@ -42,4 +42,5 @@ export const articleSourceUrlSchema = z
 
 export const createArticleRequestSchema = z.object({
   sourceUrl: articleSourceUrlSchema,
+  reprocess: z.boolean().optional().default(false),
 });

@@ -13,6 +13,30 @@ function createCandidateSlug(title: string): string {
 export async function saveArticle(input: SaveArticleInput): Promise<ArticleRecord> {
   const supabase = getSupabaseServerClient();
 
+  if (input.overwriteExisting) {
+    const existing = await getArticleBySourceUrl(input.sourceUrl);
+    if (existing) {
+      const { data, error } = await supabase
+        .from("articles")
+        .update({
+          title: input.title,
+          author: input.author,
+          published_at: input.publishedAt,
+          cover_image_url: input.coverImageUrl,
+          cleaned_html: input.cleanedHtml,
+        })
+        .eq("id", existing.id)
+        .select("*")
+        .single<ArticleRecord>();
+
+      if (error || !data) {
+        throw new Error(`Failed updating article: ${error?.message ?? "unknown error"}`);
+      }
+
+      return data;
+    }
+  }
+
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const slug = createCandidateSlug(input.title);
 

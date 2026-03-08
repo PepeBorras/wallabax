@@ -35,4 +35,5 @@ export type SaveArticleInput = {
   publishedAt: string | null;
   coverImageUrl: string | null;
   cleanedHtml: string;
+  overwriteExisting?: boolean;
 };
