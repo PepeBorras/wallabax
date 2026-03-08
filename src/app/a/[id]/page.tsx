@@ -42,7 +42,7 @@ export default async function ReaderPage({ params }: ReaderPageProps) {
       </section>
 
       <article
-        className="prose prose-slate max-w-none prose-img:rounded-md"
+        className="reader-content max-w-none"
         // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml
         // `cleaned_html` is generated server-side by `cleanArticleHtml` with a strict allowlist sanitizer.
         dangerouslySetInnerHTML={{ __html: article.cleaned_html }}

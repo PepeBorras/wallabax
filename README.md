@@ -9,6 +9,8 @@
 - Cleans article HTML to a reader-friendly format.
 - Saves the cleaned snapshot in Supabase Postgres.
 - Returns a permanent public URL (`/a/:id-or-slug`) that can be pasted into Wallabag.
+- Enforces a daily generation cap (100 new links/day) and exposes remaining quota.
+- Expires reader links after 24 hours to limit storage growth.
 
 ## Why It Exists
 
@@ -18,6 +20,7 @@ Wallabag works best with stable, clean reader pages. This project creates perman
 
 - URL validation with Zod.
 - `POST /api/articles` extraction + persistence flow.
+- `GET /api/limits` endpoint for daily quota state (`used`, `remaining`, reset time).
 - Duplicate prevention by `source_url`.
 - Public reader page at `/a/[id]`.
 - Beginner-friendly modular service architecture.
@@ -139,6 +142,7 @@ From `.env.example`:
 - `pgcrypto` extension for `gen_random_uuid()`.
 - `articles` table with required fields.
 - unique indexes on `source_url` and `slug`.
+- `article_request_events` table for abuse guardrails and telemetry.
 - `updated_at` trigger function.
 - public read policy for reader pages.
 
@@ -160,7 +164,19 @@ Open `http://localhost:3000`.
 	 - extract source HTML (`extract-x-article.ts`)
 	 - clean article HTML (`clean-article-html.ts`)
 	 - persist snapshot (`save-article.ts`)
-6. API returns `{ permanentUrl, article, cached }`.
+6. API returns `{ permanentUrl, article, cached, limits }`.
+
+## Abuse Guardrails
+
+- Daily cap: maximum 100 new generated links per UTC day.
+- Quota visibility: home UI displays remaining generations and reset time.
+- Retention: links are treated as expired after 24 hours and are purged by API retention checks.
+- Expired snapshots are excluded from reads, so expired links resolve as not found.
+- Per-IP request rate limit: max 30 requests/hour on `POST /api/articles`.
+- Per-IP generation cap: max 20 new links/day/IP.
+- Per-IP generation cooldown: at least 10 seconds between successful new generations.
+- Cache-busting replay protection: repeated query-string variants for the same canonical source are rejected in a short window.
+- Abuse telemetry warnings: logs for request spikes, repeated 422/429 patterns, and suspicious URL churn.
 
 ## Known Limitations
 

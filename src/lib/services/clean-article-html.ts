@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { isTag } from "domhandler";
+import { type AnyNode, isTag } from "domhandler";
 
 import type { CleanArticleInput } from "@/lib/types/article";
 
@@ -18,6 +18,7 @@ const ALLOWED_TAGS = new Set([
   "blockquote",
   "strong",
   "em",
+  "del",
   "a",
   "img",
   "figure",
@@ -44,11 +45,55 @@ function isSafeUrl(value: string | undefined): boolean {
   return normalized.startsWith("http://") || normalized.startsWith("https://");
 }
 
+function firstUrlFromSrcset(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const candidate = value
+    .split(",")
+    .map((entry) => entry.trim().split(/\s+/)[0])
+    .find((entry) => entry && entry.length > 0);
+
+  return candidate || undefined;
+}
+
+function resolveImageSource(node: cheerio.Cheerio<AnyNode>): string | undefined {
+  const directSrc = node.attr("src");
+  const lazySrc = node.attr("data-src");
+  const originalSrc = node.attr("data-original");
+  const lazyOriginal = node.attr("data-lazy-src");
+  const srcsetUrl = firstUrlFromSrcset(node.attr("srcset"));
+  const dataSrcsetUrl = firstUrlFromSrcset(node.attr("data-srcset"));
+
+  return directSrc || lazySrc || originalSrc || lazyOriginal || srcsetUrl || dataSrcsetUrl;
+}
+
 export function cleanArticleHtml(input: CleanArticleInput): string {
   const body$ = cheerio.load(input.rawHtml || "", undefined, false);
   const root = body$.root();
 
   root.find("script, style, noscript, iframe, nav, aside, footer, button, form").remove();
+
+  // Convert picture/source wrappers into a simple image element to keep media in reader output.
+  root.find("picture").each((_, pictureNode) => {
+    const picture = body$(pictureNode);
+    const img = picture.find("img").first();
+
+    if (!img.length) {
+      picture.remove();
+      return;
+    }
+
+    const resolvedSrc = resolveImageSource(img);
+    if (!resolvedSrc || !isSafeUrl(resolvedSrc)) {
+      picture.remove();
+      return;
+    }
+
+    img.attr("src", resolvedSrc);
+    picture.replaceWith(img);
+  });
 
   root.find("*").each((_, element) => {
     if (!isTag(element)) {
@@ -68,14 +113,26 @@ export function cleanArticleHtml(input: CleanArticleInput): string {
     }
 
     const attrs = element.attribs || {};
+
+    if (tagName === "img") {
+      const resolvedSrc = resolveImageSource(node);
+      if (!resolvedSrc || !isSafeUrl(resolvedSrc)) {
+        node.remove();
+        return;
+      }
+
+      node.attr("src", resolvedSrc);
+    }
+
     Object.keys(attrs).forEach((attr) => {
       const lower = attr.toLowerCase();
       const keepHref = tagName === "a" && lower === "href";
       const keepSrc = tagName === "img" && lower === "src";
       const keepAlt = tagName === "img" && lower === "alt";
+      const keepSrcSet = tagName === "img" && lower === "srcset";
       const keepDateTime = tagName === "time" && lower === "datetime";
 
-      if (!keepHref && !keepSrc && !keepAlt && !keepDateTime) {
+      if (!keepHref && !keepSrc && !keepAlt && !keepSrcSet && !keepDateTime) {
         node.removeAttr(attr);
       }
     });
@@ -94,6 +151,21 @@ export function cleanArticleHtml(input: CleanArticleInput): string {
       const src = node.attr("src");
       if (!isSafeUrl(src)) {
         node.remove();
+      } else {
+        const srcset = node.attr("srcset");
+        if (srcset) {
+          const normalizedSrcset = srcset
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0 && isSafeUrl(entry.split(/\s+/)[0]))
+            .join(", ");
+
+          if (normalizedSrcset.length > 0) {
+            node.attr("srcset", normalizedSrcset);
+          } else {
+            node.removeAttr("srcset");
+          }
+        }
       }
     }
   });

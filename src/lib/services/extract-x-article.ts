@@ -1,4 +1,11 @@
 import * as cheerio from "cheerio";
+import type { AnyNode } from "domhandler";
+import rehypeStringify from "rehype-stringify";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
 
 import type { ExtractedArticle } from "@/lib/types/article";
 
@@ -137,6 +144,31 @@ function absolutizeUrl(src: string | undefined, baseUrl: string): string | null 
   }
 }
 
+function firstUrlFromSrcset(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const candidate = value
+    .split(",")
+    .map((entry) => entry.trim().split(/\s+/)[0])
+    .find((entry) => entry && entry.length > 0);
+
+  return candidate || undefined;
+}
+
+function resolveImageSourceFromElement(image: cheerio.Cheerio<AnyNode>, baseUrl: string): string | null {
+  const candidate =
+    image.attr("src") ||
+    image.attr("data-src") ||
+    image.attr("data-original") ||
+    image.attr("data-lazy-src") ||
+    firstUrlFromSrcset(image.attr("srcset")) ||
+    firstUrlFromSrcset(image.attr("data-srcset"));
+
+  return absolutizeUrl(candidate, baseUrl);
+}
+
 function isStatusSourceUrl(sourceUrl: string): boolean {
   try {
     const parsed = new URL(sourceUrl);
@@ -196,13 +228,60 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
+function linkifyEscapedText(escapedValue: string): string {
+  return escapedValue.replace(
+    /(https?:\/\/[^\s<]+)/g,
+    (url) => `<a href="${url}" target="_blank" rel="nofollow noopener noreferrer">${url}</a>`,
+  );
+}
+
+function renderMarkdownInline(value: string): string {
+  const tokenPrefix = "__WBX_MEDIA_TOKEN_";
+  const tokenMap = new Map<string, string>();
+  let tokenCount = 0;
+
+  const createToken = (html: string): string => {
+    const token = `${tokenPrefix}${tokenCount}__`;
+    tokenMap.set(token, html);
+    tokenCount += 1;
+    return token;
+  };
+
+  // Linked image: [![alt](img)](link)
+  let transformed = value.replace(
+    /\[!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)\]\((https?:\/\/[^\s)]+)\)/gi,
+    (_, altText: string, imageUrl: string, linkUrl: string) =>
+      createToken(
+        `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="nofollow noopener noreferrer"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(altText || "Image")}" /></a>`,
+      ),
+  );
+
+  // Standalone image: ![alt](img)
+  transformed = transformed.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, (_, altText: string, imageUrl: string) =>
+    createToken(`<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(altText || "Image")}" />`),
+  );
+
+  let escaped = escapeHtml(transformed).replace(/\n/g, "<br />");
+  escaped = linkifyEscapedText(escaped);
+
+  // Preserve basic inline markdown styling in readable extracts.
+  escaped = escaped.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  escaped = escaped.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  escaped = escaped.replace(/__([^_\n]+)__/g, "<strong>$1</strong>");
+  escaped = escaped.replace(/~~([^~\n]+)~~/g, "<del>$1</del>");
+  escaped = escaped.replace(/(^|[\s(])\*([^*\n]+)\*(?=([\s).,!?:;]|$))/g, "$1<em>$2</em>");
+  escaped = escaped.replace(/(^|[\s(])_([^_\n]+)_(?=([\s).,!?:;]|$))/g, "$1<em>$2</em>");
+
+  for (const [token, html] of tokenMap.entries()) {
+    escaped = escaped.replaceAll(token, html);
+  }
+
+  return escaped;
+}
+
 function linkifyText(value: string): string {
   const escaped = escapeHtml(value);
-  return escaped.replace(
-    /(https?:\/\/[^\s<]+)/g,
-    (url) =>
-      `<a href="${url}" target="_blank" rel="nofollow noopener noreferrer">${url}</a>`,
-  );
+  return linkifyEscapedText(escaped);
 }
 
 function statusTextToHtml(value: string): string {
@@ -477,12 +556,23 @@ function parseFxReadableMarkdownPayload(payload: string): { title: string | null
 }
 
 function markdownToSafeHtml(markdown: string): string {
-  const blocks = markdown
-    .split(/\n{2,}/)
-    .map((block) => block.trim())
-    .filter((block) => block.length > 0);
+  const markdownProcessor = unified()
+    .use(remarkParse)
+    .use(remarkGfm)
+    .use(remarkBreaks)
+    .use(remarkRehype)
+    .use(rehypeStringify);
 
-  return blocks.map((block) => `<p>${linkifyText(block.replace(/\n/g, "<br />"))}</p>`).join("\n");
+  try {
+    return String(markdownProcessor.processSync(markdown));
+  } catch {
+    const blocks = markdown
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .filter((block) => block.length > 0);
+
+    return blocks.map((block) => `<p>${renderMarkdownInline(block)}</p>`).join("\n");
+  }
 }
 
 function deriveAuthorFromFxReadableTitle(title: string | null): string | null {
@@ -695,9 +785,28 @@ async function extractFromPage(fetchUrl: string, outputSourceUrl: string): Promi
     "script, style, noscript, iframe, nav, aside, footer, button, form, input, textarea, svg",
   ).remove();
 
+  articleNode.find("picture").each((_, node) => {
+    const picture = $(node);
+    const img = picture.find("img").first();
+
+    if (!img.length) {
+      picture.remove();
+      return;
+    }
+
+    const resolvedSrc = resolveImageSourceFromElement(img, fetchUrl);
+    if (!resolvedSrc) {
+      picture.remove();
+      return;
+    }
+
+    img.attr("src", resolvedSrc);
+    picture.replaceWith(img);
+  });
+
   articleNode.find("img").each((_, node) => {
     const image = $(node);
-    const absoluteSrc = absolutizeUrl(image.attr("src"), fetchUrl);
+    const absoluteSrc = resolveImageSourceFromElement(image, fetchUrl);
 
     if (!absoluteSrc) {
       image.remove();
@@ -705,7 +814,24 @@ async function extractFromPage(fetchUrl: string, outputSourceUrl: string): Promi
     }
 
     image.attr("src", absoluteSrc);
-    image.removeAttr("srcset");
+
+    const srcset = image.attr("srcset");
+    if (srcset) {
+      const normalizedSrcset = srcset
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => {
+          const url = entry.split(/\s+/)[0];
+          return Boolean(absolutizeUrl(url, fetchUrl));
+        })
+        .join(", ");
+
+      if (normalizedSrcset.length > 0) {
+        image.attr("srcset", normalizedSrcset);
+      } else {
+        image.removeAttr("srcset");
+      }
+    }
   });
 
   let rawHtml = articleNode.html()?.trim() ?? "";

@@ -1,8 +1,13 @@
 import Link from "next/link";
 
 import { UrlForm } from "@/components/home/url-form";
+import type { DailyLimitState } from "@/lib/policies/article-limits";
 
-export function HomeShell() {
+type HomeShellProps = {
+  initialLimits: DailyLimitState;
+};
+
+export function HomeShell({ initialLimits }: HomeShellProps) {
   const githubProfileUrl = process.env.NEXT_PUBLIC_GITHUB_PROFILE_URL || "https://github.com";
 
   return (
@@ -46,7 +51,7 @@ export function HomeShell() {
       </section>
 
       <main className="reveal reveal-delay-3">
-        <UrlForm />
+        <UrlForm initialLimits={initialLimits} />
       </main>
 
       <footer className="reveal reveal-delay-4 mt-28 text-center">

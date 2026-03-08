@@ -1,4 +1,5 @@
 import type { ArticleRecord } from "@/lib/types/article";
+import { getArticleExpiryCutoffIso } from "@/lib/policies/article-limits";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -10,6 +11,7 @@ export async function getArticleBySourceUrl(sourceUrl: string): Promise<ArticleR
     .from("articles")
     .select("*")
     .eq("source_url", sourceUrl)
+    .gte("created_at", getArticleExpiryCutoffIso())
     .maybeSingle<ArticleRecord>();
 
   if (error) {
@@ -26,6 +28,7 @@ export async function getArticleByPublicId(publicId: string): Promise<ArticleRec
     .from("articles")
     .select("*")
     .eq("slug", publicId)
+    .gte("created_at", getArticleExpiryCutoffIso())
     .maybeSingle<ArticleRecord>();
 
   if (bySlug.error) {
@@ -44,6 +47,7 @@ export async function getArticleByPublicId(publicId: string): Promise<ArticleRec
     .from("articles")
     .select("*")
     .eq("id", publicId)
+    .gte("created_at", getArticleExpiryCutoffIso())
     .maybeSingle<ArticleRecord>();
 
   if (byId.error) {
