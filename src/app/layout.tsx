@@ -16,8 +16,25 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://wallabax.vercel.app"),
   title: "Wallabax",
   description: "Create permanent clean reader pages from public X long-form URLs.",
+  openGraph: {
+    title: "Wallabax",
+    description: "Create permanent clean reader pages from public X long-form URLs.",
+    images: [
+      {
+        url: "/wallabag.png",
+        alt: "Wallabax social preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wallabax",
+    description: "Create permanent clean reader pages from public X long-form URLs.",
+    images: ["/wallabag.png"],
+  },
 };
 
 export default function RootLayout({
