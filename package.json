@@ -2,16 +2,28 @@
   "name": "wallabax",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.18.1"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "security:audit": "npm audit --omit=dev --audit-level=moderate",
+    "security:semgrep": "semgrep scan --config p/owasp-top-ten --config p/typescript --exclude 'src/app/a/*/page.tsx' --error",
+    "security": "npm run security:audit && npm run security:semgrep"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "cheerio": "^1.1.2",
+    "clsx": "^2.1.1",
+    "domhandler": "^5.0.3",
     "next": "16.1.6",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

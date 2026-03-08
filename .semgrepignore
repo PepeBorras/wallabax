@@ -1,0 +1,2 @@
+# Vetted render sink: content is sanitized server-side by cleanArticleHtml allowlist.
+src/app/a/[id]/page.tsx
