@@ -28,9 +28,103 @@ const ALLOWED_TAGS = new Set([
   "hr",
   "br",
   "time",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
   "div",
   "span",
 ]);
+
+function promoteStrongParagraphHeadings(body$: cheerio.CheerioAPI, root: cheerio.Cheerio<AnyNode>): void {
+  root.find("p").each((_, paragraphNode) => {
+    const paragraph = body$(paragraphNode);
+
+    if (paragraph.closest("li, blockquote, td, th").length > 0) {
+      return;
+    }
+
+    const elementChildren = paragraph.children();
+    if (elementChildren.length !== 1) {
+      return;
+    }
+
+    const onlyChild = elementChildren.first();
+    const onlyChildTag = onlyChild.get(0)?.tagName?.toLowerCase();
+    if (onlyChildTag !== "strong") {
+      return;
+    }
+
+    const nonWhitespaceText = paragraph
+      .contents()
+      .filter((_, node) => node.type === "text" && (node.data ?? "").trim().length > 0);
+
+    if (nonWhitespaceText.length > 0) {
+      return;
+    }
+
+    const headingText = onlyChild.text().trim();
+    if (!headingText || headingText.length > 90 || /[.!?]/.test(headingText)) {
+      return;
+    }
+
+    paragraph.replaceWith(body$("<h2></h2>").text(headingText));
+  });
+}
+
+function normalizeParagraphLists(body$: cheerio.CheerioAPI, root: cheerio.Cheerio<AnyNode>): void {
+  const listItemPattern = /^(?:([-*\u2022])\s+|(\d+)[.)]\s+)(.+)$/;
+
+  root.find("p").each((_, paragraphNode) => {
+    const paragraph = body$(paragraphNode);
+
+    if (paragraph.attr("data-wbx-list-processed") === "1") {
+      return;
+    }
+
+    if (paragraph.closest("li, blockquote, td, th").length > 0) {
+      return;
+    }
+
+    const text = paragraph.text().trim();
+    const match = text.match(listItemPattern);
+    if (!match) {
+      return;
+    }
+
+    const listType = match[2] ? "ol" : "ul";
+    const list = body$(`<${listType}></${listType}>`);
+
+    let current: cheerio.Cheerio<AnyNode> | undefined = paragraph;
+    while (current && current.length > 0) {
+      if (current.get(0)?.tagName?.toLowerCase() !== "p") {
+        break;
+      }
+
+      const currentText = current.text().trim();
+      const currentMatch = currentText.match(listItemPattern);
+      if (!currentMatch) {
+        break;
+      }
+
+      const currentType = currentMatch[2] ? "ol" : "ul";
+      if (currentType !== listType) {
+        break;
+      }
+
+      const itemText = currentMatch[3].trim();
+      list.append(body$("<li></li>").text(itemText));
+      current.attr("data-wbx-list-processed", "1");
+      current = current.next();
+    }
+
+    paragraph.replaceWith(list);
+  });
+
+  root.find("p[data-wbx-list-processed='1']").remove();
+}
 
 function toSafeText(value: string | null): string {
   return value?.trim() ?? "";
@@ -169,6 +263,9 @@ export function cleanArticleHtml(input: CleanArticleInput): string {
       }
     }
   });
+
+  promoteStrongParagraphHeadings(body$, root);
+  normalizeParagraphLists(body$, root);
 
   const cleanedBody = root.html()?.trim();
   const plainTextFallback = root
