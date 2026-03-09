@@ -8,6 +8,26 @@ type ReaderPageProps = {
   params: Promise<{ id: string }>;
 };
 
+function getFirstHttpImageFromHtml(html: string): string | null {
+  const match = html.match(/<img\b[^>]*\bsrc=["']([^"']+)["']/i);
+  const src = match?.[1]?.trim();
+
+  if (!src) {
+    return null;
+  }
+
+  try {
+    const url = new URL(src);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return src;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export async function generateMetadata({ params }: ReaderPageProps): Promise<Metadata> {
   const { id } = await params;
   const article = await getArticleByPublicId(id);
@@ -18,9 +38,23 @@ export async function generateMetadata({ params }: ReaderPageProps): Promise<Met
     };
   }
 
+  const metadataImage = article.cover_image_url ?? getFirstHttpImageFromHtml(article.cleaned_html);
+  const socialImages = metadataImage ? [metadataImage] : undefined;
+
   return {
-    title: `${article.title} | Wallabax`,
+    title: article.title,
     description: `Reader copy of: ${article.source_url}`,
+    openGraph: {
+      title: article.title,
+      description: `Reader copy of: ${article.source_url}`,
+      images: socialImages,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: article.title,
+      description: `Reader copy of: ${article.source_url}`,
+      images: socialImages,
+    },
   };
 }
 
