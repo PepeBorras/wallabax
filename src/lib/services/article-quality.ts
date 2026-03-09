@@ -14,6 +14,15 @@ function normalizedText(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+function getMeaningfulBlockCount(cleanedHtml: string): number {
+  const $ = cheerio.load(cleanedHtml);
+
+  return $("#reader-article p, #reader-article li, #reader-article h2, #reader-article h3, #reader-article blockquote")
+    .toArray()
+    .map((node) => normalizedText($(node).text()))
+    .filter((text) => text.length >= 40).length;
+}
+
 export function getArticleQualityScore(cleanedHtml: string): number {
   const $ = cheerio.load(cleanedHtml);
   const text = normalizedText($.text());
@@ -34,14 +43,19 @@ export function isLowQualityArticleHtml(cleanedHtml: string): boolean {
   const score = getArticleQualityScore(cleanedHtml);
   const $ = cheerio.load(cleanedHtml);
   const text = normalizedText($.text());
+  const meaningfulBlockCount = getMeaningfulBlockCount(cleanedHtml);
+  const hasRichStructure = $("#reader-article img, #reader-article ul, #reader-article ol, #reader-article table").length > 0;
+  const hasLowSignalPhrase = LOW_SIGNAL_PHRASES.some((phrase) => text.includes(phrase));
 
-  if (text.length < 220) {
+  // Hard fail only when very short and structurally sparse.
+  if (text.length < 140 && meaningfulBlockCount < 2 && !hasRichStructure) {
     return true;
   }
 
-  if (LOW_SIGNAL_PHRASES.some((phrase) => text.includes(phrase))) {
+  // Boilerplate markers are a strong signal only when content is also thin.
+  if (hasLowSignalPhrase && text.length < 380 && meaningfulBlockCount < 3 && !hasRichStructure) {
     return true;
   }
 
-  return score < 300;
+  return score < 220 && meaningfulBlockCount < 2 && !hasRichStructure;
 }
