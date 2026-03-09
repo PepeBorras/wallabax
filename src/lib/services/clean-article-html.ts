@@ -99,7 +99,8 @@ function normalizeParagraphLists(body$: cheerio.CheerioAPI, root: cheerio.Cheeri
 
     let current: cheerio.Cheerio<AnyNode> | undefined = paragraph;
     while (current && current.length > 0) {
-      if (current.get(0)?.tagName?.toLowerCase() !== "p") {
+      const currentNode = current.get(0);
+      if (!currentNode || !isTag(currentNode) || currentNode.tagName.toLowerCase() !== "p") {
         break;
       }
 
