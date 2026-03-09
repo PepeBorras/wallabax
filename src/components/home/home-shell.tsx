@@ -44,12 +44,11 @@ export function HomeShell({ initialLimits }: HomeShellProps) {
           </span>
         </h2>
         <p className="max-w-145 text-lg leading-relaxed font-medium text-slate-500 md:text-xl">
-          If you use Wallabag to read later on devices like Kobo, you may have noticed that X’s new long-form articles don’t save properly.
+          If you use Wallabag or other read-later services, you may have noticed that X’s new long-form articles don’t save properly.
         </p>
         <br />
         <p className="max-w-145 text-lg leading-relaxed font-medium text-slate-500 md:text-xl">
-          Wallabax is a minimal utility to save your favorite X articles directly to your personal Wallabag
-          instance. No issues, just reading. 
+          Wallabax is a minimal utility to generate clean reader links and save your favorite X articles directly to your favorite read-it-later app. No issues, just reading. 
         </p>
       </section>
 
