@@ -4,6 +4,17 @@ import { notFound } from "next/navigation";
 
 import { getArticleByPublicId } from "@/lib/services/get-article";
 
+function buildGeneratedReaderSocialImageUrl(title: string, author: string | null): string {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://wallabax.vercel.app";
+  const params = new URLSearchParams({ title });
+
+  if (author) {
+    params.set("author", author);
+  }
+
+  return `${baseUrl.replace(/\/$/, "")}/api/og?${params.toString()}`;
+}
+
 type ReaderPageProps = {
   params: Promise<{ id: string }>;
 };
@@ -38,8 +49,11 @@ export async function generateMetadata({ params }: ReaderPageProps): Promise<Met
     };
   }
 
-  const metadataImage = article.cover_image_url ?? getFirstHttpImageFromHtml(article.cleaned_html);
-  const socialImages = metadataImage ? [metadataImage] : undefined;
+  const metadataImage =
+    article.cover_image_url ??
+    getFirstHttpImageFromHtml(article.cleaned_html) ??
+    buildGeneratedReaderSocialImageUrl(article.title, article.author);
+  const socialImages = [metadataImage];
 
   return {
     title: article.title,
