@@ -19,7 +19,7 @@
     "cheerio": "^1.1.2",
     "clsx": "^2.1.1",
     "domhandler": "^5.0.3",
-    "next": "16.1.6",
+    "next": "^16.2.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "rehype-stringify": "^10.0.1",
