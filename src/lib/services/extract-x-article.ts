@@ -1,7 +1,5 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
-import { JSDOM } from "jsdom";
-import { Readability } from "@mozilla/readability";
 import rehypeStringify from "rehype-stringify";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -689,7 +687,7 @@ async function extractFromJinaReader(sourceUrl: string): Promise<ExtractedArticl
   }
 }
 
-async function extractFromReadability(sourceUrl: string): Promise<ExtractedArticle | null> {
+async function extractFromSmartParser(sourceUrl: string): Promise<ExtractedArticle | null> {
   try {
     const response = await fetch(sourceUrl, {
       signal: AbortSignal.timeout(12000),
@@ -705,25 +703,71 @@ async function extractFromReadability(sourceUrl: string): Promise<ExtractedArtic
     }
 
     const html = await response.text();
-    const dom = new JSDOM(html, { url: sourceUrl });
-    const reader = new Readability(dom.window.document);
-    const article = reader.parse();
+    const $ = cheerio.load(html);
 
-    if (!article || !article.content || article.content.trim().length === 0) {
-      return null;
+    // Extract metadata
+    const title =
+      $("meta[property='og:title']").attr("content") ||
+      $("meta[name='twitter:title']").attr("content") ||
+      $("h1").first().text() ||
+      $("title").first().text() ||
+      "Untitled";
+
+    const author =
+      $("meta[name='author']").attr("content") ||
+      $("meta[property='article:author']").attr("content") ||
+      $("[rel='author']").first().text() ||
+      null;
+
+    const image =
+      $("meta[property='og:image']").attr("content") ||
+      $("meta[name='twitter:image']").attr("content") ||
+      null;
+
+    // Try to find main article content - look for common article containers
+    let content = "";
+    const articleSelectors = [
+      "article",
+      "[role='main'] article",
+      "main article",
+      "[itemprop='articleBody']",
+      ".article-content",
+      ".post-content",
+      ".entry-content",
+      "main",
+      ".content",
+    ];
+
+    for (const selector of articleSelectors) {
+      const element = $(selector).first();
+      if (element.length > 0) {
+        // Remove unwanted elements
+        element.find("script, style, nav, aside, footer, button, form, .ad, .advertisement").remove();
+        content = element.html() || "";
+        if (content.trim().length > 0) {
+          break;
+        }
+      }
     }
 
-    if (getHtmlTextLength(article.content) < 200) {
+    // Fallback to body if nothing found
+    if (!content.trim()) {
+      const body = $("body");
+      body.find("script, style, nav, aside, footer, button, form, .ad, .advertisement, .sidebar").remove();
+      content = body.html() || "";
+    }
+
+    if (!content.trim() || getHtmlTextLength(content) < 200) {
       return null;
     }
 
     return {
       sourceUrl,
-      title: article.title ?? "Untitled",
-      author: article.byline ?? null,
+      title: title.trim() || "Untitled",
+      author,
       publishedAt: null,
-      coverImageUrl: article.image ?? null,
-      rawHtml: article.content,
+      coverImageUrl: image,
+      rawHtml: content,
     };
   } catch {
     return null;
@@ -798,9 +842,9 @@ export async function extractXArticle(sourceUrl: string): Promise<ExtractedArtic
       return jinaExtracted;
     }
 
-    const readabilityExtracted = await extractFromReadability(sourceUrl);
-    if (readabilityExtracted) {
-      return readabilityExtracted;
+    const smartExtracted = await extractFromSmartParser(sourceUrl);
+    if (smartExtracted) {
+      return smartExtracted;
     }
   }
 
