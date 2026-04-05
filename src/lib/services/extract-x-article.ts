@@ -179,6 +179,15 @@ function isStatusSourceUrl(sourceUrl: string): boolean {
   }
 }
 
+function isXUrl(sourceUrl: string): boolean {
+  try {
+    const parsed = new URL(sourceUrl);
+    return /(^|\.)x\.com$|(^|\.)twitter\.com$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeStatusText(value: string | null): string | null {
   if (!value) {
     return null;
@@ -634,6 +643,50 @@ async function extractFromFxReadableStatus(sourceUrl: string): Promise<Extracted
   }
 }
 
+async function extractFromJinaReader(sourceUrl: string): Promise<ExtractedArticle | null> {
+  try {
+    const readableUrl = `https://r.jina.ai/${sourceUrl}`;
+
+    const response = await fetch(readableUrl, {
+      signal: AbortSignal.timeout(10000),
+      headers: {
+        accept: "text/plain,text/markdown,*/*",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = await response.text();
+    const parsedPayload = parseFxReadableMarkdownPayload(payload);
+    if (!parsedPayload.markdown) {
+      return null;
+    }
+
+    if (parsedPayload.markdown.includes("This page is not supported.")) {
+      return null;
+    }
+
+    const rawHtml = markdownToSafeHtml(parsedPayload.markdown);
+    if (getHtmlTextLength(rawHtml) < 200) {
+      return null;
+    }
+
+    return {
+      sourceUrl,
+      title: parsedPayload.title ?? "Untitled",
+      author: null,
+      publishedAt: null,
+      coverImageUrl: null,
+      rawHtml,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function buildStatusFallbackHtml(statusText: string | null, sourceUrl: string): string {
   const $ = cheerio.load("<article id='status-fallback'></article>");
   const article = $("#status-fallback");
@@ -670,7 +723,10 @@ function deriveStatusUsername(sourceUrl: string): string | null {
 }
 
 export async function extractXArticle(sourceUrl: string): Promise<ExtractedArticle> {
-  if (isStatusSourceUrl(sourceUrl)) {
+  const isXDomain = isXUrl(sourceUrl);
+
+  // X-specific extraction strategies for status posts
+  if (isXDomain && isStatusSourceUrl(sourceUrl)) {
     const linkedArticleExtracted = await extractLinkedArticleFromStatus(sourceUrl);
     if (linkedArticleExtracted) {
       return linkedArticleExtracted;
@@ -692,6 +748,15 @@ export async function extractXArticle(sourceUrl: string): Promise<ExtractedArtic
     }
   }
 
+  // For non-X websites, try Jina reader first for better extraction quality
+  if (!isXDomain) {
+    const jinaExtracted = await extractFromJinaReader(sourceUrl);
+    if (jinaExtracted) {
+      return jinaExtracted;
+    }
+  }
+
+  // Fallback to generic HTML parsing for all sources
   return extractFromPage(sourceUrl, sourceUrl);
 }
 

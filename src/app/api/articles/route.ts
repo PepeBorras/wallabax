@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
 
     return auditAndRespond(
       {
-        error: "Could not process this URL right now. Try another public X article URL.",
+        error: "Could not process this URL right now. Try another public website URL.",
       },
       500,
     );

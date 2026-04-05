@@ -84,7 +84,7 @@ export function UrlForm({ initialLimits }: UrlFormProps) {
 
     if (!validatedInput.success) {
       const firstIssue = validatedInput.error.issues[0];
-      setErrorMessage(firstIssue?.message ?? "Enter a valid public X article or status URL.");
+      setErrorMessage(firstIssue?.message ?? "Enter a valid website URL.");
       return;
     }
 
@@ -157,7 +157,7 @@ export function UrlForm({ initialLimits }: UrlFormProps) {
         <form className="flex flex-col gap-8" onSubmit={onSubmit}>
           <label className="flex flex-col gap-3" htmlFor="article-url">
             <span className="ml-1 text-sm font-bold uppercase tracking-wider text-slate-500">
-              Paste an X article URL
+              Paste an article or website URL
             </span>
             <div className="relative">
               <input
@@ -166,7 +166,7 @@ export function UrlForm({ initialLimits }: UrlFormProps) {
                 type="url"
                 required
                 className="w-full rounded-xl border-2 border-slate-100 bg-white/50 px-5 py-5 text-lg font-medium placeholder:text-slate-300 focus:border-(--color-primary) focus:ring-4 focus:ring-teal-500/10 focus:outline-none"
-                placeholder="https://x.com/username/status/..."
+                placeholder="https://example.com/article"
                 value={sourceUrl}
                 onChange={(event) => setSourceUrl(event.target.value)}
               />
