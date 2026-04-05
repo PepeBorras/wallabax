@@ -1,5 +1,7 @@
 import * as cheerio from "cheerio";
 import type { AnyNode } from "domhandler";
+import { JSDOM } from "jsdom";
+import { Readability } from "@mozilla/readability";
 import rehypeStringify from "rehype-stringify";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
@@ -687,6 +689,47 @@ async function extractFromJinaReader(sourceUrl: string): Promise<ExtractedArticl
   }
 }
 
+async function extractFromReadability(sourceUrl: string): Promise<ExtractedArticle | null> {
+  try {
+    const response = await fetch(sourceUrl, {
+      signal: AbortSignal.timeout(12000),
+      headers: {
+        "user-agent": "Mozilla/5.0 (compatible; XToWallabagReader/1.0; +https://vercel.com)",
+        accept: "text/html,application/xhtml+xml",
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const html = await response.text();
+    const dom = new JSDOM(html, { url: sourceUrl });
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
+
+    if (!article || !article.content || article.content.trim().length === 0) {
+      return null;
+    }
+
+    if (getHtmlTextLength(article.content) < 200) {
+      return null;
+    }
+
+    return {
+      sourceUrl,
+      title: article.title ?? "Untitled",
+      author: article.byline ?? null,
+      publishedAt: null,
+      coverImageUrl: article.image ?? null,
+      rawHtml: article.content,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function buildStatusFallbackHtml(statusText: string | null, sourceUrl: string): string {
   const $ = cheerio.load("<article id='status-fallback'></article>");
   const article = $("#status-fallback");
@@ -748,11 +791,16 @@ export async function extractXArticle(sourceUrl: string): Promise<ExtractedArtic
     }
   }
 
-  // For non-X websites, try Jina reader first for better extraction quality
+  // For non-X websites, try multiple extraction methods
   if (!isXDomain) {
     const jinaExtracted = await extractFromJinaReader(sourceUrl);
     if (jinaExtracted) {
       return jinaExtracted;
+    }
+
+    const readabilityExtracted = await extractFromReadability(sourceUrl);
+    if (readabilityExtracted) {
+      return readabilityExtracted;
     }
   }
 

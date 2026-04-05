@@ -15,10 +15,12 @@
     "security": "npm run security:audit && npm run security:semgrep"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.5.0",
     "@supabase/supabase-js": "^2.57.4",
     "cheerio": "^1.1.2",
     "clsx": "^2.1.1",
     "domhandler": "^5.0.3",
+    "jsdom": "^24.0.0",
     "next": "^16.2.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
